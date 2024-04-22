@@ -59,7 +59,7 @@ def get_model(epochs = 1, batch_sz = 10, model_type = "vanilla"):
 
 def main():
 
-    path = None
+    path = "data/unblind_nohostz"
     test_fraction = 0.3
     classifier = sn1a_classifier
     
