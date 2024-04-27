@@ -79,7 +79,7 @@ def to_categorical(y, nb_classes=None):
 		Y[i, y[i]] = 1.
 	return Y
 
-def load_data(path="data/unblind_nohostz", classifier=sn1a_classifier, test_fraction=0.2, nb_augment=1, seed=None):
+def load_data(path="data/unblind_hostz", classifier=sn1a_classifier, test_fraction=0.2, nb_augment=1, seed=None):
 	'''
 	Loads data from the files produced by preprocess.py. Returns the data as numpy arrays which can be used in the
         model.
