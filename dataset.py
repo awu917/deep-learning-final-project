@@ -122,6 +122,8 @@ def load_data(path="data/unblind_nohostz", classifier=sn1a_classifier, test_frac
 	with open(path+'_1.csv', 'rt') as csvfile:
 		reader = csv.reader(csvfile)
 		for row in reader:
+			if not row:
+				continue
 			id = int(row[0])
 			if id != last_id:
 				ids.append(id)
@@ -155,6 +157,8 @@ def load_data(path="data/unblind_nohostz", classifier=sn1a_classifier, test_frac
 		with open(path+'_'+str(i)+'.csv', 'rt') as csvfile:
 			reader = csv.reader(csvfile)
 			for row in reader:
+				if not row:
+					continue
 				id = int(row[0])
 				if id != last_id:
 					if not first_time:
