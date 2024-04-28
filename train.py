@@ -3,26 +3,28 @@ import numpy as np
 from types import SimpleNamespace
 from sklearn.metrics import roc_auc_score
 from dataset import *
+from keras.layers import Input
 
 
 class SupernovaRNN(tf.keras.Model):
 
     ##########################################################################################
 
-    def __init__(self, model_type, hidden_size=16, rnn_size=16):
+    def __init__(self, sequence_len, output_dim, model_type, hidden_size=16, rnn_size=16):
 
         super().__init__()
-
+        self.sequence_len = sequence_len
+        self.output_dim = output_dim
         self.rnn_size = rnn_size
         self.hidden_size = hidden_size
 
         if model_type.lower() == "lstm":
-            self.RNNlayer = tf.keras.layers.LSTM(units=self.rnn_size, return_sequences=True, return_state=False)
+            self.RNNlayer = tf.keras.layers.LSTM(units=self.rnn_size, return_sequences=False, return_state=False)
         elif model_type.lower() == "gru":
             # idk if the return_sequences and return_state parameters are correct
-            self.RNNlayer = tf.keras.layers.GRU(units = self.rnn_size, return_sequences=True, return_state=False)
+            self.RNNlayer = tf.keras.layers.GRU(units = self.rnn_size, return_sequences=False, return_state=False)
         elif model_type.lower() == "vanilla":
-            self.RNNlayer = tf.keras.layers.SimpleRNN(units = self.rnn_size, return_sequences=True, return_state=False)
+            self.RNNlayer = tf.keras.layers.SimpleRNN(units = self.rnn_size, return_sequences=False, return_state=False)
         else:
             raise Exception("invalid model type")
 
@@ -40,9 +42,9 @@ class SupernovaRNN(tf.keras.Model):
         return probs
 
 
-def get_model(epochs = 1, batch_sz = 10, model_type = "vanilla"):
+def get_model(sequence_len, output_dim, epochs = 1, batch_sz = 10, model_type = "vanilla"):
 
-    model = SupernovaRNN(model_type)
+    model = SupernovaRNN(sequence_len, output_dim, model_type)
 
     model.compile(
         optimizer=tf.keras.optimizers.Adam(learning_rate = 0.001),
@@ -59,7 +61,7 @@ def get_model(epochs = 1, batch_sz = 10, model_type = "vanilla"):
 
 def main():
 
-    path = "data/unblind_nohostz"
+    path = "data/unblind_hostz"
     test_fraction = 0.3
     classifier = sn1a_classifier
     
@@ -67,9 +69,8 @@ def main():
         path=path, 
         test_fraction=test_fraction,
         classifier=classifier)
-
-
-    args = get_model(epochs = 1, batch_sz = 10, model_type = "vanilla")
+    
+    args = get_model(sequence_len, output_dim, model_type = "gru", epochs = 50, batch_sz = 10)
 
     args.model.fit(
         X_train, Y_train,

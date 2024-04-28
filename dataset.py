@@ -72,12 +72,11 @@ def to_categorical(y, nb_classes=None):
 	* Y is a binary class matrix
 	- Used in load_data()
 	'''
-	if not nb_classes:
-		nb_classes = np.max(y)+1
 	Y = np.zeros((len(y), nb_classes))
 	for i in range(len(y)):
 		Y[i, y[i]] = 1.
 	return Y
+
 
 def load_data(path="data/unblind_hostz", classifier=sn1a_classifier, test_fraction=0.2, nb_augment=1, seed=None):
 	'''
