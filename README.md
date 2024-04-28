@@ -1,4 +1,4 @@
 # deep-learning-final-project
 Deep Learning Final Project - AJ, Arin, Katie, Stella 
 
-THIS CHANGE IS IN MY BRANCH ONLY
+Run train.py with either "vanilla," "lstm," or "gru" passed into model_type. 

@@ -70,7 +70,7 @@ def main():
         test_fraction=test_fraction,
         classifier=classifier)
     
-    args = get_model(sequence_len, output_dim, model_type = "gru", epochs = 50, batch_sz = 10)
+    args = get_model(sequence_len, output_dim, model_type = "lstm", epochs = 50, batch_sz = 10)
 
     args.model.fit(
         X_train, Y_train,
