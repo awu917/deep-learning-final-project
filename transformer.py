@@ -74,10 +74,11 @@ class SupernovaTransformer(tf.keras.Model):
         # self.dense1 = tf.keras.layers.Dense(dff, activation='relu')
         # self.dense2 = tf.keras.layers.Dense(output_dim)
 
-        self.ff_layer = tf.keras.Sequential([tf.keras.layers.Dense(13, activation='leaky_relu'), 
-                                             tf.keras.layers.Dense(13)])
+        self.ff_layer = tf.keras.Sequential([tf.keras.layers.Dense(2*output_dim, activation='relu'), 
+                                             tf.keras.layers.Dense(output_dim)])
         self.self_atten         = tf.keras.layers.MultiHeadAttention(num_heads=num_heads, key_dim=d_model)
         self.layer_norm = tf.keras.layers.LayerNormalization(axis=-1)
+        self.output_dim = output_dim
 
     def call(self, inputs):
         # embedded = self.embedding(inputs)
@@ -109,9 +110,11 @@ class SupernovaTransformer(tf.keras.Model):
 
         normalized_ff = self.layer_norm(ff)
         print("Normalized Feedforward Output Shape:", normalized_ff.shape)
-
-        # reshaped_ff = tf.reshape(normalized_ff, tf.shape(None, 2, 13))
-        return tf.nn.softmax(normalized_ff)
+        
+        # Reshape the output to match the expected shape (None, 2, 13)
+        output = tf.reshape(normalized_ff, (-1, 2, 13))
+        
+        return output
 
 def get_model(sequence_len, output_dim, epochs=1, batch_sz=10):
     model = SupernovaTransformer(sequence_len, output_dim)
@@ -139,14 +142,26 @@ def main():
     args = get_model(sequence_len, output_dim, epochs=50, batch_sz=10)
 
     Y_train_encoded = to_categorical(Y_train, num_classes=13)
+    
     Y_test_encoded = to_categorical(Y_test, num_classes=13)
 
-    args.model.fit(
-        X_train, Y_train_encoded,
-        epochs=args.epochs, 
-        batch_size=args.batch_size,
-        validation_data=(X_test, Y_test_encoded)
-    )
+    batch_size = args.batch_size
+    
+    for epoch in range(args.epochs):
+        print(f"Epoch {epoch+1}/{args.epochs}")
+        for i in range(0, len(X_train), batch_size):
+            x_batch = X_train[i:i+batch_size]
+            y_batch = Y_train_encoded[i:i+batch_size]
+
+            # Perform training on the current batch
+            loss = args.model.train_on_batch(x_batch, y_batch)
+
+            # Optionally, print or log the loss
+            print(f"Batch {i//batch_size+1}/{len(X_train)//batch_size}: Loss = {loss}")
+
+        # Evaluate the model on the validation data after each epoch
+        val_loss = args.model.evaluate(X_test, Y_test_encoded, batch_size=batch_size)
+        print(f"Validation Loss: {val_loss}")
 
 if __name__ == '__main__':
     main()
