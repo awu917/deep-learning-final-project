@@ -64,7 +64,7 @@ class PositionalEncoding(tf.keras.layers.Layer):
 
 class SupernovaTransformer(tf.keras.Model):
 
-    def __init__(self, sequence_len, output_dim, num_heads=2, d_model=16, dff=16, dropout=0.1):
+    def __init__(self, sequence_len, output_dim, batch_size, num_heads=2, d_model=16, dff=16, dropout=0.1):
         super().__init__()
         # self.sequence_len = sequence_len
         # self.output_dim = output_dim
@@ -79,6 +79,7 @@ class SupernovaTransformer(tf.keras.Model):
         self.self_atten         = tf.keras.layers.MultiHeadAttention(num_heads=num_heads, key_dim=d_model)
         self.layer_norm = tf.keras.layers.LayerNormalization(axis=-1)
         self.output_dim = output_dim
+        self.batch_size = batch_size
 
     def call(self, inputs):
         # embedded = self.embedding(inputs)
@@ -114,12 +115,17 @@ class SupernovaTransformer(tf.keras.Model):
         soft = tf.nn.softmax(normalized_ff)
         
         # Reshape the output to match the expected shape (None, 2, 13)
-        output = tf.reshape(soft, (-1, 2, 13))
+        # output = tf.reshape(soft, (-1, 2, 13))
+
+        # batch_size = tf.shape(inputs)[0]
+        output = tf.reshape(soft, (self.batch_size, 2, 13))
+        print("Last output layer", output.shape)
+
         
         return output
 
 def get_model(sequence_len, output_dim, epochs=1, batch_sz=10):
-    model = SupernovaTransformer(sequence_len, output_dim)
+    model = SupernovaTransformer(sequence_len, output_dim, batch_sz)
     model.compile(
         optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
         loss='categorical_crossentropy',
