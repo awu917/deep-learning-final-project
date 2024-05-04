@@ -3,6 +3,7 @@ import numpy as np
 from types import SimpleNamespace
 from dataset import *
 from keras.layers import Input
+from keras.utils import to_categorical
 
 def positional_encoding(length, depth):
     ## REFERENCE: https://www.tensorflow.org/text/tutorials/transformer#the_embedding_and_positional_encoding_layer
@@ -19,14 +20,13 @@ def positional_encoding(length, depth):
         ## This serves as offset for the Positional Encoding
         return pos_encoding
 
-
 class PositionalEncoding(tf.keras.layers.Layer):
-    def __init__(self, window_size, embed_size):
+    def __init__(self, vocab_size, embed_size, window_size):
         super().__init__()
         self.embed_size = embed_size
 
         ## Embed labels into an optimizable embedding space
-        self.embedding = tf.keras.layers.Embedding(input_dim=window_size, output_dim=embed_size)
+        self.embedding = tf.keras.layers.Embedding(vocab_size, embed_size)
 
         ## Implement sinosoidal positional encoding: offset by varying sinosoidal frequencies. 
         ## HINT: May want to use the function above...
@@ -34,12 +34,31 @@ class PositionalEncoding(tf.keras.layers.Layer):
 
     def call(self, x):
         ## TODO: Get embeddings and and scale them by sqrt of embedding size, and add positional encoding.
-        embedded = self.embedding(x)
-        embedded *= tf.math.sqrt(tf.cast(self.embed_size, tf.float32))
+        x = self.embedding(x)
+        x *= tf.math.sqrt(tf.cast(self.embed_size, tf.float32))
+        x += self.pos_encoding
+        return x
+
+# class PositionalEncoding(tf.keras.layers.Layer):
+#     def __init__(self, window_size, embed_size):
+#         super().__init__()
+#         self.embed_size = embed_size
+
+#         ## Embed labels into an optimizable embedding space
+#         self.embedding = tf.keras.layers.Embedding(input_dim=window_size, output_dim=embed_size)
+
+#         ## Implement sinosoidal positional encoding: offset by varying sinosoidal frequencies. 
+#         ## HINT: May want to use the function above...
+#         self.pos_encoding = positional_encoding(window_size, embed_size)
+
+    # def call(self, x):
+    #     ## TODO: Get embeddings and and scale them by sqrt of embedding size, and add positional encoding.
+    #     embedded = self.embedding(x)
+    #     embedded *= tf.math.sqrt(tf.cast(self.embed_size, tf.float32))
         
-        pos_encoding = positional_encoding(tf.shape(x)[1], self.embed_size)
+    #     pos_encoding = positional_encoding(tf.shape(x)[1], self.embed_size)
         
-        return embedded + pos_encoding
+    #     return embedded + pos_encoding
 
 
 
@@ -47,21 +66,52 @@ class SupernovaTransformer(tf.keras.Model):
 
     def __init__(self, sequence_len, output_dim, num_heads=2, d_model=16, dff=16, dropout=0.1):
         super().__init__()
-        self.sequence_len = sequence_len
-        self.output_dim = output_dim
+        # self.sequence_len = sequence_len
+        # self.output_dim = output_dim
 
-        self.embedding = PositionalEncoding(sequence_len, d_model)
-        self.multi_head_attention = tf.keras.layers.MultiHeadAttention(num_heads=num_heads, key_dim=d_model)
-        self.dense1 = tf.keras.layers.Dense(dff, activation='relu')
-        self.dense2 = tf.keras.layers.Dense(output_dim)
+        # self.embedding = PositionalEncoding(sequence_len, d_model)
+        # self.multi_head_attention = tf.keras.layers.MultiHeadAttention(num_heads=num_heads, key_dim=d_model)
+        # self.dense1 = tf.keras.layers.Dense(dff, activation='relu')
+        # self.dense2 = tf.keras.layers.Dense(output_dim)
+
+        self.ff_layer = tf.keras.Sequential([tf.keras.layers.Dense(13, activation='leaky_relu'), 
+                                             tf.keras.layers.Dense(13)])
+        self.self_atten         = tf.keras.layers.MultiHeadAttention(num_heads=num_heads, key_dim=d_model)
+        self.layer_norm = tf.keras.layers.LayerNormalization(axis=-1)
 
     def call(self, inputs):
-        embedded = self.embedding(inputs)
-        attention_output = self.multi_head_attention(embedded, embedded)
-        pos_encoding = self.embedding.pos_encoding[:, :tf.shape(embedded)[1], :]
-        attention_output = tf.keras.layers.LayerNormalization(epsilon=1e-6)(attention_output + pos_encoding)
-        ffn_output = self.dense2(self.dense1(attention_output))
-        return tf.nn.softmax(ffn_output)
+        # embedded = self.embedding(inputs)
+        # attention_output = self.multi_head_attention(embedded, embedded)
+        # pos_encoding = self.embedding.pos_encoding[:, :tf.shape(embedded)[1], :]
+        # attention_output = tf.keras.layers.LayerNormalization(epsilon=1e-6)(attention_output + pos_encoding)
+        # ffn_output = self.dense2(self.dense1(attention_output))
+        # return tf.nn.softmax(ffn_output)
+    
+        # embedded = self.embedding(inputs)
+        # attention_output = self.multi_head_attention(embedded, embedded)
+        
+        # # Ensure pos_encoding has the same shape as embedded
+        # pos_encoding = self.embedding.pos_encoding[:, :tf.shape(embedded)[1], :]
+        # attention_output = tf.keras.layers.LayerNormalization(epsilon=1e-6)(attention_output + pos_encoding)
+        # ffn_output = self.dense2(self.dense1(attention_output))
+        # return tf.nn.softmax(ffn_output)
+    
+        print("Input Shape:", inputs.shape)
+
+        attention = self.self_atten(inputs, inputs, inputs)
+        print("Attention Output Shape:", attention.shape)
+
+        normalized_attn = self.layer_norm(inputs + attention)
+        print("Normalized Attention Output Shape:", normalized_attn.shape)
+
+        ff = self.ff_layer(normalized_attn)
+        print("Feedforward Output Shape:", ff.shape)
+
+        normalized_ff = self.layer_norm(ff)
+        print("Normalized Feedforward Output Shape:", normalized_ff.shape)
+
+        # reshaped_ff = tf.reshape(normalized_ff, tf.shape(None, 2, 13))
+        return tf.nn.softmax(normalized_ff)
 
 def get_model(sequence_len, output_dim, epochs=1, batch_sz=10):
     model = SupernovaTransformer(sequence_len, output_dim)
@@ -88,11 +138,14 @@ def main():
     
     args = get_model(sequence_len, output_dim, epochs=50, batch_sz=10)
 
+    Y_train_encoded = to_categorical(Y_train, num_classes=13)
+    Y_test_encoded = to_categorical(Y_test, num_classes=13)
+
     args.model.fit(
-        X_train, Y_train,
+        X_train, Y_train_encoded,
         epochs=args.epochs, 
         batch_size=args.batch_size,
-        validation_data=(X_test, Y_test)
+        validation_data=(X_test, Y_test_encoded)
     )
 
 if __name__ == '__main__':
