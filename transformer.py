@@ -2,80 +2,43 @@ import tensorflow as tf
 import numpy as np
 from types import SimpleNamespace
 from dataset import *
-from keras.layers import Input
-from keras.utils import to_categorical
 
 def positional_encoding(length, depth):
-    ## REFERENCE: https://www.tensorflow.org/text/tutorials/transformer#the_embedding_and_positional_encoding_layer
-    ## TODO: Can remove signature
-    ## Generate a range of positions and depths 
-        positions = tf.cast(tf.range(length)[:, tf.newaxis], dtype=tf.float32)    # (seq, 1)
-        depths = tf.cast(tf.range(depth)[tf.newaxis, :], dtype=tf.float32) / tf.cast(depth, tf.float32)  # (1, depth)
-        
-        ## Compute range of radians to take the sine and cosine of.
-        angle_rates = 1 / (10000 ** depths)               # (1, depth)
-        angle_rads = positions * angle_rates             # (pos, depth)
-        
-        pos_encoding = tf.concat([tf.sin(angle_rads), tf.cos(angle_rads)], axis=-1) 
-        ## This serves as offset for the Positional Encoding
-        return pos_encoding
+    positions = tf.cast(tf.range(length)[:, tf.newaxis], dtype=tf.float32)
+    depths = tf.cast(tf.range(depth)[tf.newaxis, :], dtype=tf.float32) / tf.cast(depth, tf.float32)
+    angle_rates = 1 / (10000 ** depths)
+    angle_rads = positions * angle_rates
+    pos_encoding = tf.concat([tf.sin(angle_rads), tf.cos(angle_rads)], axis=-1) 
+    return pos_encoding
 
 class PositionalEncoding(tf.keras.layers.Layer):
     def __init__(self, vocab_size, embed_size, window_size):
         super().__init__()
         self.embed_size = embed_size
-
-        ## Embed labels into an optimizable embedding space
         self.embedding = tf.keras.layers.Embedding(vocab_size, embed_size)
-
-        ## Implement sinosoidal positional encoding: offset by varying sinosoidal frequencies. 
-        ## HINT: May want to use the function above...
         self.pos_encoding = positional_encoding(window_size, embed_size)
 
     def call(self, x):
-        ## TODO: Get embeddings and and scale them by sqrt of embedding size, and add positional encoding.
         x = self.embedding(x)
         x *= tf.math.sqrt(tf.cast(self.embed_size, tf.float32))
         x += self.pos_encoding
         return x
 
-# class PositionalEncoding(tf.keras.layers.Layer):
-#     def __init__(self, window_size, embed_size):
-#         super().__init__()
-#         self.embed_size = embed_size
-
-#         ## Embed labels into an optimizable embedding space
-#         self.embedding = tf.keras.layers.Embedding(input_dim=window_size, output_dim=embed_size)
-
-#         ## Implement sinosoidal positional encoding: offset by varying sinosoidal frequencies. 
-#         ## HINT: May want to use the function above...
-#         self.pos_encoding = positional_encoding(window_size, embed_size)
-
-    # def call(self, x):
-    #     ## TODO: Get embeddings and and scale them by sqrt of embedding size, and add positional encoding.
-    #     embedded = self.embedding(x)
-    #     embedded *= tf.math.sqrt(tf.cast(self.embed_size, tf.float32))
-        
-    #     pos_encoding = positional_encoding(tf.shape(x)[1], self.embed_size)
-        
-    #     return embedded + pos_encoding
-
-
-
 class SupernovaTransformer(tf.keras.Model):
-
-    def __init__(self, sequence_len, output_dim, batch_size, num_heads=2, d_model=16, dff=16, dropout=0.1):
+    def __init__(self, sequence_len, output_dim, nb_classes, batch_size, num_heads=2, d_model=16, dff=16, dropout=0.1):
         super().__init__()
 
-        self.ff_layer = tf.keras.Sequential([tf.keras.layers.Dense(2*output_dim, activation='relu'), 
-                                             tf.keras.layers.Dense(output_dim)])
-        self.self_atten         = tf.keras.layers.MultiHeadAttention(num_heads=num_heads, key_dim=d_model)
+        self.ff_layer = tf.keras.Sequential([
+            tf.keras.layers.Dense(dff, activation='relu'),  # Adjust the dimension here
+            tf.keras.layers.Dense(output_dim)
+        ])
+        self.self_atten = tf.keras.layers.MultiHeadAttention(num_heads=num_heads, key_dim=d_model)
         self.layer_norm = tf.keras.layers.LayerNormalization(axis=-1)
         self.output_dim = output_dim
         self.batch_size = batch_size
+        self.nb_classes = nb_classes
 
     def call(self, inputs):
-    
         print("Input Shape:", inputs.shape)
 
         attention = self.self_atten(inputs, inputs, inputs)
@@ -92,19 +55,180 @@ class SupernovaTransformer(tf.keras.Model):
 
         soft = tf.nn.softmax(normalized_ff)
         
-        # Reshape the output to match the expected shape (None, 2, 13)
-        # output = tf.reshape(soft, (-1, 2, 13))
-
-        output = tf.reduce_mean(soft, axis=1)
+        # Reshape the output to match the expected shape
+        output = tf.reshape(soft, (-1,self.batch_size,self.nb_classes))
         print("Last output layer", output.shape)
 
-        
         return output
 
-def get_model(sequence_len, output_dim, epochs=1, batch_sz=10):
-    model = SupernovaTransformer(sequence_len, output_dim, batch_sz)
+
+    def compile(self, optimizer, loss, metrics):
+        '''
+        Create a facade to mimic normal keras fit routine
+        '''
+        self.optimizer = optimizer
+        self.loss_function = loss 
+        self.accuracy_function = metrics[0]
+
+    def train(self, train_captions, train_image_features, padding_index, batch_size=30):
+        """
+        Runs through one epoch - all training examples.
+
+        :param model: the initialized model to use for forward and backward pass
+        :param train_captions: train data captions (all data for training) 
+        :param train_images: train image features (all data for training) 
+        :param padding_index: the padding index, the id of *PAD* token. This integer is used when masking padding labels.
+        :return: None
+        """
+
+        ## TODO: Implement similar to test below.
+
+        ## NOTE: shuffle the training examples (perhaps using tf.random.shuffle on a
+        ##       range of indices spanning # of training entries, then tf.gather) 
+        ##       to make training smoother over multiple epochs.
+
+        ## NOTE: make sure you are calculating gradients and optimizing as appropriate
+        ##       (similar to batch_step from HW2)
+
+        avg_loss = 0
+        avg_acc = 0
+        avg_prp = 0      
+        num_batches = int(len(train_captions) / batch_size)
+        total_loss = total_seen = total_correct = 0
+
+        for index, end in enumerate(range(batch_size, len(train_captions)+1, batch_size)):
+            start = end - batch_size
+            batch_image_features = train_image_features[start:end, :]
+            decoder_input = train_captions[start:end, :-1]
+            decoder_labels = train_captions[start:end, 1:]
+        
+            with tf.GradientTape() as tape:
+                probs = self(batch_image_features, decoder_input)
+                mask = decoder_labels != padding_index
+                num_predictions = tf.reduce_sum(tf.cast(mask, tf.float32))
+                loss = self.loss_function(probs, decoder_labels, mask)
+
+            grads = tape.gradient(loss, self.trainable_variables)
+            self.optimizer.apply_gradients(zip(grads, self.trainable_variables))
+            accuracy = self.accuracy_function(probs, decoder_labels, mask)
+
+            total_loss += loss
+            total_seen += num_predictions
+            total_correct += num_predictions * accuracy
+
+        avg_loss = float(total_loss / total_seen)
+        avg_acc = float(total_correct / total_seen)
+        avg_prp = np.exp(avg_loss)
+
+        print(f"\r[Train {index+1}/{num_batches}]\t loss={avg_loss:.3f}\t acc: {avg_acc:.3f}\t perp: {avg_prp:.3f}", end='')
+
+        # print(f"\nTrain Epoch\t Loss: {avg_loss:.3f}\t Acc: {avg_acc:.3f}\t Perp: {avg_prp:.3f}")
+
+        return avg_loss, avg_acc, avg_prp
+
+    def test(self, test_captions, test_image_features, padding_index, batch_size=30):
+        """
+        DO NOT CHANGE; Use as inspiration
+
+        Runs through one epoch - all testing examples.
+
+        :param model: the initilized model to use for forward and backward pass
+        :param test_captions: test caption data (all data for testing) of shape (num captions,20)
+        :param test_image_features: test image feature data (all data for testing) of shape (num captions,1000)
+        :param padding_index: the padding index, the id of *PAD* token. This integer is used to mask padding labels.
+        :returns: perplexity of the test set, per symbol accuracy on test set
+        """
+        num_batches = int(len(test_captions) / batch_size)
+
+        total_loss = total_seen = total_correct = 0
+        for index, end in enumerate(range(batch_size, len(test_captions)+1, batch_size)):
+
+            # NOTE: 
+            # - The captions passed to the decoder should have the last token in the window removed:
+            #	 [<START> student working on homework <STOP>] --> [<START> student working on homework]
+            #
+            # - When computing loss, the decoder labels should have the first word removed:
+            #	 [<START> student working on homework <STOP>] --> [student working on homework <STOP>]
+
+            ## Get the current batch of data, making sure to try to predict the next word
+            start = end - batch_size
+            batch_image_features = test_image_features[start:end, :]
+            decoder_input = test_captions[start:end, :-1]
+            decoder_labels = test_captions[start:end, 1:]
+
+            ## Perform a no-training forward pass. Make sure to factor out irrelevant labels.
+            probs = self(batch_image_features, decoder_input)
+            mask = decoder_labels != padding_index
+            num_predictions = tf.reduce_sum(tf.cast(mask, tf.float32))
+            loss = self.loss_function(probs, decoder_labels, mask)
+            accuracy = self.accuracy_function(probs, decoder_labels, mask)
+
+            ## Compute and report on aggregated statistics
+            total_loss += loss
+            total_seen += num_predictions
+            total_correct += num_predictions * accuracy
+
+            avg_loss = float(total_loss / total_seen)
+            avg_acc = float(total_correct / total_seen)
+            avg_prp = np.exp(avg_loss)
+            print(f"\r[Valid {index+1}/{num_batches}]\t loss={avg_loss:.3f}\t acc: {avg_acc:.3f}\t perp: {avg_prp:.3f}", end='')
+
+        print()        
+        return avg_prp, avg_acc
+    
+    def get_config(self):
+        base_config = super().get_config()
+        config = {
+            "decoder": tf.keras.utils.serialize_keras_object(self.decoder),
+        }
+        return {**base_config, **config}
+
+    @classmethod
+    def from_config(cls, config):
+        decoder_config = config.pop("decoder")
+        decoder = tf.keras.utils.deserialize_keras_object(decoder_config)
+        return cls(decoder, **config)
+
+
+def accuracy_function(prbs, labels, mask):
+    """
+    DO NOT CHANGE
+
+    Computes the batch accuracy
+
+    :param prbs:  float tensor, word prediction probabilities [BATCH_SIZE x WINDOW_SIZE x VOCAB_SIZE]
+    :param labels:  integer tensor, word prediction labels [BATCH_SIZE x WINDOW_SIZE]
+    :param mask:  tensor that acts as a padding mask [BATCH_SIZE x WINDOW_SIZE]
+    :return: scalar tensor of accuracy of the batch between 0 and 1
+    """
+    correct_classes = tf.argmax(prbs, axis=-1) == labels
+    accuracy = tf.reduce_mean(tf.boolean_mask(tf.cast(correct_classes, tf.float32), mask))
+    return accuracy
+
+
+def loss_function(prbs, labels, mask):
+    """
+    DO NOT CHANGE
+
+    Calculates the model cross-entropy loss after one forward pass
+    Please use reduce sum here instead of reduce mean to make things easier in calculating per symbol accuracy.
+
+    :param prbs:  float tensor, word prediction probabilities [batch_size x window_size x english_vocab_size]
+    :param labels:  integer tensor, word prediction labels [batch_size x window_size]
+    :param mask:  tensor that acts as a padding mask [batch_size x window_size]
+    :return: the loss of the model as a tensor
+    """
+    masked_labs = tf.boolean_mask(labels, mask)
+    masked_prbs = tf.boolean_mask(prbs, mask)
+    scce = tf.keras.losses.sparse_categorical_crossentropy(masked_labs, masked_prbs, from_logits=True)
+    loss = tf.reduce_sum(scce)
+    return loss
+
+def get_model(sequence_len, output_dim, nb_classes, batch_sz, optimizer_name, lr, epochs=1):
+    optimizer = getattr(tf.keras.optimizers, optimizer_name)(learning_rate=lr)
+    model = SupernovaTransformer(sequence_len, output_dim, nb_classes, batch_sz)
     model.compile(
-        optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
+        optimizer=optimizer,
         loss='categorical_crossentropy',
         metrics=[tf.keras.metrics.AUC()]
     )
@@ -112,6 +236,8 @@ def get_model(sequence_len, output_dim, epochs=1, batch_sz=10):
         model=model,
         epochs=epochs,
         batch_size=batch_sz,
+        optimizer=optimizer,
+        lr=lr,
     )
 
 def main():
@@ -124,31 +250,51 @@ def main():
         test_fraction=test_fraction,
         classifier=classifier)
     
-    args = get_model(sequence_len, output_dim, epochs=50, batch_sz=10)
-
-    Y_train_encoded = to_categorical(Y_train, num_classes=13)
-    Y_train_encoded_reshaped = tf.reduce_mean(Y_train_encoded, axis=1)
+    args = get_model(sequence_len, output_dim, nb_classes, batch_sz=10, optimizer_name='Adam', lr=0.001, epochs=50)
+    model = args.model
     
-    Y_test_encoded = to_categorical(Y_test, num_classes=13)
-    Y_test_encoded_reshaped = tf.reduce_mean(Y_test_encoded, axis=1)
+    Y_train_reshaped = np.expand_dims(Y_train, axis=1)
+    Y_test_reshaped = np.expand_dims(Y_test, axis=1)
 
-    batch_size = args.batch_size
+    compile_model(model, args.optimizer, 'categorical_crossentropy', [tf.keras.metrics.AUC()])
+    
+    # Train the model
+    train_stats = train_model(model, X_train, Y_train, X_test, Y_test, args)
+
+    # Test the model
+    test_stats = test_model(model, X_test, Y_test, args)
+    
+    # Print or log training and testing statistics
+    print("Training statistics:", train_stats)
+    print("Testing statistics:", test_stats)
+
+
+def compile_model(model, optimizer, loss, metrics):
+    '''Compiles model by reference based on arguments'''
+    model.optimizer = optimizer
+    model.loss_function = loss 
+    model.accuracy_function = metrics[0]
+
+def train_model(model, train_captions, train_image_features, test_captions, test_image_features, args):
+    '''Trains model and returns model statistics'''
+    train_stats = []
+    valid_stats = []
+    
     for epoch in range(args.epochs):
-        print(f"Epoch {epoch+1}/{args.epochs}")
-        for i in range(0, len(X_train), batch_size):
-            x_batch = X_train[i:i+batch_size]
-            y_batch = Y_train_encoded_reshaped[i:i+batch_size]
+        train_loss, train_acc, train_perp = model.train(train_captions, train_image_features, args.batch_size)
+        train_stats.append((train_loss, train_acc, train_perp))
 
-            loss = args.model.train_on_batch(x_batch, y_batch)
+        valid_loss, valid_acc, valid_perp = model.test(test_captions, test_image_features, args.batch_size)
+        valid_stats.append((valid_loss, valid_acc, valid_perp))
 
-            print(f"Batch {i//batch_size+1}/{len(X_train)//batch_size}: Loss = {loss}")
+        print(f"Epoch {epoch+1}/{args.epochs}: Train Loss={train_loss:.3f}, Acc={train_acc:.3f}, Perp={train_perp:.3f}; Valid Loss={valid_loss:.3f}, Acc={valid_acc:.3f}, Perp={valid_perp:.3f}")
 
-        # Reshape the ground truth labels to match the model output shape
-        # Y_test_encoded_reshaped = Y_test_encoded.reshape(-1, 2, 13)
-       
-        
-        val_loss = args.model.evaluate(X_test, Y_test_encoded_reshaped, batch_size=batch_size)
-        print(f"Validation Loss: {val_loss}")
+    return train_stats, valid_stats
 
+def test_model(model, test_captions, test_image_features, args):
+    '''Tests model and returns model statistics'''
+    test_loss, test_acc, test_perp = model.test(test_captions, test_image_features, args.batch_size)
+    print(f"Test Loss={test_loss:.3f}, Acc={test_acc:.3f}, Perp={test_perp:.3f}")
+    return test_loss, test_acc, test_perp
 if __name__ == '__main__':
     main()
