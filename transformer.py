@@ -110,9 +110,11 @@ class SupernovaTransformer(tf.keras.Model):
 
         normalized_ff = self.layer_norm(ff)
         print("Normalized Feedforward Output Shape:", normalized_ff.shape)
+
+        soft = tf.nn.softmax(normalized_ff)
         
         # Reshape the output to match the expected shape (None, 2, 13)
-        output = tf.reshape(normalized_ff, (-1, 2, 13))
+        output = tf.reshape(soft, (-1, 2, 13))
         
         return output
 
@@ -153,13 +155,10 @@ def main():
             x_batch = X_train[i:i+batch_size]
             y_batch = Y_train_encoded[i:i+batch_size]
 
-            # Perform training on the current batch
             loss = args.model.train_on_batch(x_batch, y_batch)
 
-            # Optionally, print or log the loss
             print(f"Batch {i//batch_size+1}/{len(X_train)//batch_size}: Loss = {loss}")
 
-        # Evaluate the model on the validation data after each epoch
         val_loss = args.model.evaluate(X_test, Y_test_encoded, batch_size=batch_size)
         print(f"Validation Loss: {val_loss}")
 
