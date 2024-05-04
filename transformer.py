@@ -66,13 +66,6 @@ class SupernovaTransformer(tf.keras.Model):
 
     def __init__(self, sequence_len, output_dim, batch_size, num_heads=2, d_model=16, dff=16, dropout=0.1):
         super().__init__()
-        # self.sequence_len = sequence_len
-        # self.output_dim = output_dim
-
-        # self.embedding = PositionalEncoding(sequence_len, d_model)
-        # self.multi_head_attention = tf.keras.layers.MultiHeadAttention(num_heads=num_heads, key_dim=d_model)
-        # self.dense1 = tf.keras.layers.Dense(dff, activation='relu')
-        # self.dense2 = tf.keras.layers.Dense(output_dim)
 
         self.ff_layer = tf.keras.Sequential([tf.keras.layers.Dense(2*output_dim, activation='relu'), 
                                              tf.keras.layers.Dense(output_dim)])
@@ -82,21 +75,6 @@ class SupernovaTransformer(tf.keras.Model):
         self.batch_size = batch_size
 
     def call(self, inputs):
-        # embedded = self.embedding(inputs)
-        # attention_output = self.multi_head_attention(embedded, embedded)
-        # pos_encoding = self.embedding.pos_encoding[:, :tf.shape(embedded)[1], :]
-        # attention_output = tf.keras.layers.LayerNormalization(epsilon=1e-6)(attention_output + pos_encoding)
-        # ffn_output = self.dense2(self.dense1(attention_output))
-        # return tf.nn.softmax(ffn_output)
-    
-        # embedded = self.embedding(inputs)
-        # attention_output = self.multi_head_attention(embedded, embedded)
-        
-        # # Ensure pos_encoding has the same shape as embedded
-        # pos_encoding = self.embedding.pos_encoding[:, :tf.shape(embedded)[1], :]
-        # attention_output = tf.keras.layers.LayerNormalization(epsilon=1e-6)(attention_output + pos_encoding)
-        # ffn_output = self.dense2(self.dense1(attention_output))
-        # return tf.nn.softmax(ffn_output)
     
         print("Input Shape:", inputs.shape)
 
@@ -117,8 +95,7 @@ class SupernovaTransformer(tf.keras.Model):
         # Reshape the output to match the expected shape (None, 2, 13)
         # output = tf.reshape(soft, (-1, 2, 13))
 
-        # batch_size = tf.shape(inputs)[0]
-        output = tf.reshape(soft, (self.batch_size, 2, 13))
+        output = tf.reduce_mean(soft, axis=1)
         print("Last output layer", output.shape)
 
         
@@ -150,22 +127,27 @@ def main():
     args = get_model(sequence_len, output_dim, epochs=50, batch_sz=10)
 
     Y_train_encoded = to_categorical(Y_train, num_classes=13)
+    Y_train_encoded_reshaped = tf.reduce_mean(Y_train_encoded, axis=1)
     
     Y_test_encoded = to_categorical(Y_test, num_classes=13)
+    Y_test_encoded_reshaped = tf.reduce_mean(Y_test_encoded, axis=1)
 
     batch_size = args.batch_size
-    
     for epoch in range(args.epochs):
         print(f"Epoch {epoch+1}/{args.epochs}")
         for i in range(0, len(X_train), batch_size):
             x_batch = X_train[i:i+batch_size]
-            y_batch = Y_train_encoded[i:i+batch_size]
+            y_batch = Y_train_encoded_reshaped[i:i+batch_size]
 
             loss = args.model.train_on_batch(x_batch, y_batch)
 
             print(f"Batch {i//batch_size+1}/{len(X_train)//batch_size}: Loss = {loss}")
 
-        val_loss = args.model.evaluate(X_test, Y_test_encoded, batch_size=batch_size)
+        # Reshape the ground truth labels to match the model output shape
+        # Y_test_encoded_reshaped = Y_test_encoded.reshape(-1, 2, 13)
+       
+        
+        val_loss = args.model.evaluate(X_test, Y_test_encoded_reshaped, batch_size=batch_size)
         print(f"Validation Loss: {val_loss}")
 
 if __name__ == '__main__':
