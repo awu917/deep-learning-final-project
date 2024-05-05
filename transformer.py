@@ -2,7 +2,7 @@ import tensorflow as tf
 import numpy as np
 from types import SimpleNamespace
 from dataset import *
-from keras.layers import Input
+from matplotlib import pyplot as plt
 
 class SupernovaTransformer(tf.keras.Model):
 
@@ -58,14 +58,30 @@ def main():
         test_fraction=test_fraction,
         classifier=classifier)
 
-    args = get_model(filter_size=X_train.shape[-1], nb_classes=nb_classes, epochs=100, batch_sz=10)
+    args = get_model(filter_size=X_train.shape[-1], nb_classes=nb_classes, epochs=2, batch_sz=10)
 
-    args.model.fit(
+    history = args.model.fit(
         X_train, Y_train,
         epochs=args.epochs, 
         batch_size=args.batch_size,
         validation_data=(X_test, Y_test)
     )
+
+    #plotting acc and loss
+    plt.plot(history.history['auc'], color='b')
+    plt.plot(history.history['val_auc'], color='m')
+    plt.title('model accuracy')
+    plt.ylabel('AUC accuracy')
+    plt.xlabel('epoch')
+    plt.legend(['train', 'val'], loc='upper left')
+    plt.show()
+    plt.plot(history.history['loss'], color='b')
+    plt.plot(history.history['val_loss'], color='m')
+    plt.title('model loss')
+    plt.ylabel('loss')
+    plt.xlabel('epoch')
+    plt.legend(['train', 'val'], loc='upper left')
+    plt.show()
 
 if __name__ == '__main__':
     main()

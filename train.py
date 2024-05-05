@@ -3,6 +3,7 @@ import numpy as np
 from types import SimpleNamespace
 from sklearn.metrics import roc_auc_score
 from dataset import *
+from matplotlib import pyplot as plt
 
 
 class SupernovaRNN(tf.keras.Model):
@@ -74,12 +75,28 @@ def main():
 
     args = get_model(epochs = 1, batch_sz = 10, model_type = "vanilla")
 
-    args.model.fit(
+    history = args.model.fit(
         X_train, Y_train,
         epochs = args.epochs, 
         batch_size = args.batch_size,
         validation_data=(X_test,Y_test)
     )
+
+    #plotting acc and loss
+    plt.plot(history.history['auc'], color='b')
+    plt.plot(history.history['val_auc'], color='m')
+    plt.title('model accuracy')
+    plt.ylabel('AUC accuracy')
+    plt.xlabel('epoch')
+    plt.legend(['train', 'val'], loc='upper left')
+    plt.show()
+    plt.plot(history.history['loss'], color='b')
+    plt.plot(history.history['val_loss'], color='m')
+    plt.title('model loss')
+    plt.ylabel('loss')
+    plt.xlabel('epoch')
+    plt.legend(['train', 'val'], loc='upper left')
+    plt.show()
 
 if __name__ == '__main__':
     main()
