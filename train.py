@@ -3,18 +3,16 @@ import numpy as np
 from types import SimpleNamespace
 from sklearn.metrics import roc_auc_score
 from dataset import *
-from keras.layers import Input
 
 
 class SupernovaRNN(tf.keras.Model):
 
     ##########################################################################################
 
-    def __init__(self, sequence_len, nb_classes, model_type, hidden_size=16, rnn_size=16):
+    def __init__(self, model_type, hidden_size=16, rnn_size=16):
 
         super().__init__()
-        self.sequence_len = sequence_len
-        self.nb_classes = nb_classes
+
         self.rnn_size = rnn_size
         self.hidden_size = hidden_size
 
@@ -29,22 +27,23 @@ class SupernovaRNN(tf.keras.Model):
             raise Exception("invalid model type")
 
         self.dense1 = tf.keras.layers.Dense(units=self.hidden_size)
-        self.dense2 = tf.keras.layers.Dense(units=nb_classes)
+        self.dense2 = tf.keras.layers.Dense(units=2)
 
 
     def call(self, inputs):
         RNN_outputs = self.RNNlayer(inputs)
+        print("Output shape from recurrent layer:", RNN_outputs.shape)
         logits1 = self.dense1(RNN_outputs)
         relu_outputs = tf.nn.leaky_relu(logits1)
         dropout_outputs = tf.nn.dropout(relu_outputs, 0.3)
         logits2 = self.dense2(dropout_outputs)
-        probs = tf.nn.softmax(logits2)
-        return probs
+        pred = tf.nn.softmax(logits2)
+        return pred
 
 
-def get_model(sequence_len, output_dim, epochs = 1, batch_sz = 10, model_type = "vanilla"):
+def get_model(epochs = 1, batch_sz = 10, model_type = "vanilla"):
 
-    model = SupernovaRNN(sequence_len, output_dim, model_type)
+    model = SupernovaRNN(model_type)
 
     model.compile(
         optimizer=tf.keras.optimizers.Adam(learning_rate = 0.001),
@@ -60,7 +59,7 @@ def get_model(sequence_len, output_dim, epochs = 1, batch_sz = 10, model_type = 
 
 
 def main():
-    # vanilla: loss: 0.5024 - auc: 0.8305 - val_loss:0.4982 - val_auc: 0.8355
+
     path = "data/unblind_hostz"
     test_fraction = 0.3
     classifier = sn1a_classifier
@@ -69,13 +68,16 @@ def main():
         path=path, 
         test_fraction=test_fraction,
         classifier=classifier)
-    
-    args = get_model(sequence_len, output_dim, model_type = "vanilla", epochs = 100, batch_sz = 10)
+    print("Input shape:", X_train.shape)
+    print("Target label shape, y train:", Y_train.shape)
+    print("Sequence length expected by model:", sequence_len)
+
+    args = get_model(epochs = 1, batch_sz = 10, model_type = "vanilla")
 
     args.model.fit(
         X_train, Y_train,
-        epochs= args.epochs, 
-        batch_size= args.batch_size,
+        epochs = args.epochs, 
+        batch_size = args.batch_size,
         validation_data=(X_test,Y_test)
     )
 

@@ -6,39 +6,37 @@ from keras.layers import Input
 
 class SupernovaTransformer(tf.keras.Model):
 
-    def __init__(self, last_filter_size, nb_classes,head_size=256, num_heads=4, ff_dim=4,dropout=0.25):
+    def __init__(self, filter_size, nb_classes,hidden_sz=16, head_size=256, num_heads=4):
         super().__init__()
 
         self.attention = tf.keras.layers.MultiHeadAttention(
-            key_dim=head_size, num_heads=num_heads, dropout=dropout
+            key_dim=head_size, num_heads=num_heads
         )
-        self.attn_dropout = tf.keras.layers.Dropout(dropout)
         self.attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-6)
-        self.attn_dropout = tf.keras.layers.Dropout(dropout)
-        self.conv1 = tf.keras.layers.Conv1D(filters=ff_dim, kernel_size=1, activation="relu")
-        self.conv_dropout = tf.keras.layers.Dropout(dropout)
-        self.conv2 = tf.keras.layers.Conv1D(filters=last_filter_size, kernel_size=1)
+        self.conv1 = tf.keras.layers.Conv1D(filters=filter_size, kernel_size=1)
         self.conv_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-6)
         self.pooling = tf.keras.layers.GlobalAveragePooling1D(data_format="channels_last")
-        self.dense = tf.keras.layers.Dense(units=nb_classes)
-
+        self.dense1 = tf.keras.layers.Dense(units=hidden_sz)
+        self.dense2 = tf.keras.layers.Dense(units=nb_classes)
 
     def call(self, inputs):
         attn_output = self.attention(inputs, inputs)
-        attn_dropout = self.attn_dropout(attn_output)
+        attn_dropout = tf.nn.dropout(attn_output, 0.3)
         attn_layer_norm = self.attn_layer_norm(attn_dropout)
         res = attn_layer_norm + inputs
 
         conv1_output = self.conv1(res)
-        conv1_dropout = self.conv_dropout(conv1_output)
-        conv2_output = self.conv2(conv1_dropout)
-        conv_layer_norm = self.conv_layer_norm(conv2_output)
+        conv1_dropout = tf.nn.dropout(conv1_output, 0.3)
+        conv_layer_norm = self.conv_layer_norm(conv1_dropout)
         pooling = self.pooling(conv_layer_norm + res)
-        dense= self.dense(pooling) 
-        return tf.nn.softmax(dense)
+        logits1= self.dense1(pooling)
+        relu_outputs = tf.nn.leaky_relu(logits1)
+        dropout_outputs = tf.nn.dropout(relu_outputs, 0.3)
+        logits2 = self.dense2(dropout_outputs)
+        return tf.nn.softmax(logits2)
 
-def get_model(last_filter_size, nb_classes, epochs=1, batch_sz=10):
-    model = SupernovaTransformer(last_filter_size=last_filter_size, nb_classes=nb_classes)
+def get_model(filter_size, nb_classes, epochs=1, batch_sz=10):
+    model = SupernovaTransformer(filter_size=filter_size, nb_classes=nb_classes)
     model.compile(
         optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
         loss='categorical_crossentropy',
@@ -60,7 +58,7 @@ def main():
         test_fraction=test_fraction,
         classifier=classifier)
 
-    args = get_model(last_filter_size=X_train.shape[-1], nb_classes=nb_classes, epochs=10, batch_sz=10)
+    args = get_model(filter_size=X_train.shape[-1], nb_classes=nb_classes, epochs=100, batch_sz=10)
 
     args.model.fit(
         X_train, Y_train,
