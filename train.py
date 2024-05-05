@@ -73,7 +73,7 @@ def main():
     print("Target label shape, y train:", Y_train.shape)
     print("Sequence length expected by model:", sequence_len)
 
-    args = get_model(epochs = 1, batch_sz = 10, model_type = "vanilla")
+    args = get_model(epochs = 50, batch_sz = 10, model_type = "gru")
 
     history = args.model.fit(
         X_train, Y_train,
