@@ -10,11 +10,11 @@ class SupernovaRNN(tf.keras.Model):
 
     ##########################################################################################
 
-    def __init__(self, sequence_len, output_dim, model_type, hidden_size=16, rnn_size=16):
+    def __init__(self, sequence_len, nb_classes, model_type, hidden_size=16, rnn_size=16):
 
         super().__init__()
         self.sequence_len = sequence_len
-        self.output_dim = output_dim
+        self.nb_classes = nb_classes
         self.rnn_size = rnn_size
         self.hidden_size = hidden_size
 
@@ -29,7 +29,7 @@ class SupernovaRNN(tf.keras.Model):
             raise Exception("invalid model type")
 
         self.dense1 = tf.keras.layers.Dense(units=self.hidden_size)
-        self.dense2 = tf.keras.layers.Dense(units=2)
+        self.dense2 = tf.keras.layers.Dense(units=nb_classes)
 
 
     def call(self, inputs):
@@ -60,7 +60,7 @@ def get_model(sequence_len, output_dim, epochs = 1, batch_sz = 10, model_type = 
 
 
 def main():
-
+    # vanilla: loss: 0.5024 - auc: 0.8305 - val_loss:0.4982 - val_auc: 0.8355
     path = "data/unblind_hostz"
     test_fraction = 0.3
     classifier = sn1a_classifier
@@ -70,7 +70,7 @@ def main():
         test_fraction=test_fraction,
         classifier=classifier)
     
-    args = get_model(sequence_len, output_dim, model_type = "lstm", epochs = 50, batch_sz = 10)
+    args = get_model(sequence_len, output_dim, model_type = "vanilla", epochs = 100, batch_sz = 10)
 
     args.model.fit(
         X_train, Y_train,

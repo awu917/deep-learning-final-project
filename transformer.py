@@ -4,67 +4,41 @@ from types import SimpleNamespace
 from dataset import *
 from keras.layers import Input
 
-def positional_encoding(length, depth):
-    ## REFERENCE: https://www.tensorflow.org/text/tutorials/transformer#the_embedding_and_positional_encoding_layer
-    ## TODO: Can remove signature
-    ## Generate a range of positions and depths 
-        positions = tf.cast(tf.range(length)[:, tf.newaxis], dtype=tf.float32)    # (seq, 1)
-        depths = tf.cast(tf.range(depth)[tf.newaxis, :], dtype=tf.float32) / tf.cast(depth, tf.float32)  # (1, depth)
-        
-        ## Compute range of radians to take the sine and cosine of.
-        angle_rates = 1 / (10000 ** depths)               # (1, depth)
-        angle_rads = positions * angle_rates             # (pos, depth)
-        
-        pos_encoding = tf.concat([tf.sin(angle_rads), tf.cos(angle_rads)], axis=-1) 
-        ## This serves as offset for the Positional Encoding
-        return pos_encoding
-
-
-class PositionalEncoding(tf.keras.layers.Layer):
-    def __init__(self, window_size, embed_size):
-        super().__init__()
-        self.embed_size = embed_size
-
-        ## Embed labels into an optimizable embedding space
-        self.embedding = tf.keras.layers.Embedding(input_dim=window_size, output_dim=embed_size)
-
-        ## Implement sinosoidal positional encoding: offset by varying sinosoidal frequencies. 
-        ## HINT: May want to use the function above...
-        self.pos_encoding = positional_encoding(window_size, embed_size)
-
-    def call(self, x):
-        ## TODO: Get embeddings and and scale them by sqrt of embedding size, and add positional encoding.
-        embedded = self.embedding(x)
-        embedded *= tf.math.sqrt(tf.cast(self.embed_size, tf.float32))
-        
-        pos_encoding = positional_encoding(tf.shape(x)[1], self.embed_size)
-        
-        return embedded + pos_encoding
-
-
-
 class SupernovaTransformer(tf.keras.Model):
 
-    def __init__(self, sequence_len, output_dim, num_heads=2, d_model=16, dff=16, dropout=0.1):
+    def __init__(self, last_filter_size, nb_classes,head_size=256, num_heads=4, ff_dim=4,dropout=0.25):
         super().__init__()
-        self.sequence_len = sequence_len
-        self.output_dim = output_dim
 
-        self.embedding = PositionalEncoding(sequence_len, d_model)
-        self.multi_head_attention = tf.keras.layers.MultiHeadAttention(num_heads=num_heads, key_dim=d_model)
-        self.dense1 = tf.keras.layers.Dense(dff, activation='relu')
-        self.dense2 = tf.keras.layers.Dense(output_dim)
+        self.attention = tf.keras.layers.MultiHeadAttention(
+            key_dim=head_size, num_heads=num_heads, dropout=dropout
+        )
+        self.attn_dropout = tf.keras.layers.Dropout(dropout)
+        self.attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.attn_dropout = tf.keras.layers.Dropout(dropout)
+        self.conv1 = tf.keras.layers.Conv1D(filters=ff_dim, kernel_size=1, activation="relu")
+        self.conv_dropout = tf.keras.layers.Dropout(dropout)
+        self.conv2 = tf.keras.layers.Conv1D(filters=last_filter_size, kernel_size=1)
+        self.conv_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-6)
+        self.pooling = tf.keras.layers.GlobalAveragePooling1D(data_format="channels_last")
+        self.dense = tf.keras.layers.Dense(units=nb_classes)
+
 
     def call(self, inputs):
-        embedded = self.embedding(inputs)
-        attention_output = self.multi_head_attention(embedded, embedded)
-        pos_encoding = self.embedding.pos_encoding[:, :tf.shape(embedded)[1], :]
-        attention_output = tf.keras.layers.LayerNormalization(epsilon=1e-6)(attention_output + pos_encoding)
-        ffn_output = self.dense2(self.dense1(attention_output))
-        return tf.nn.softmax(ffn_output)
+        attn_output = self.attention(inputs, inputs)
+        attn_dropout = self.attn_dropout(attn_output)
+        attn_layer_norm = self.attn_layer_norm(attn_dropout)
+        res = attn_layer_norm + inputs
 
-def get_model(sequence_len, output_dim, epochs=1, batch_sz=10):
-    model = SupernovaTransformer(sequence_len, output_dim)
+        conv1_output = self.conv1(res)
+        conv1_dropout = self.conv_dropout(conv1_output)
+        conv2_output = self.conv2(conv1_dropout)
+        conv_layer_norm = self.conv_layer_norm(conv2_output)
+        pooling = self.pooling(conv_layer_norm + res)
+        dense= self.dense(pooling) 
+        return tf.nn.softmax(dense)
+
+def get_model(last_filter_size, nb_classes, epochs=1, batch_sz=10):
+    model = SupernovaTransformer(last_filter_size=last_filter_size, nb_classes=nb_classes)
     model.compile(
         optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
         loss='categorical_crossentropy',
@@ -85,8 +59,8 @@ def main():
         path=path, 
         test_fraction=test_fraction,
         classifier=classifier)
-    
-    args = get_model(sequence_len, output_dim, epochs=50, batch_sz=10)
+
+    args = get_model(last_filter_size=X_train.shape[-1], nb_classes=nb_classes, epochs=10, batch_sz=10)
 
     args.model.fit(
         X_train, Y_train,
