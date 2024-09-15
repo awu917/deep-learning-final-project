@@ -1,10 +1,10 @@
 # Deep Learning Supernova Classifiers 
 AJ Wu, Arin Idhant, Katie Li, Stella Tsogtjargal
 
-**To run our RNN model, run train.py with either "vanilla," "lstm," or "gru" passed into model_type. 
+**To run our RNN model, run train.py with either "vanilla," "lstm," or "gru" passed into model_type.**
 
 
-To run our transformer model, run transformer.py **
+**To run our transformer model, run transformer.py**
 
 
 **Results:** Our best validation accuracy of 0.9770 was achieved with the LSTM model after 50 epochs. 
